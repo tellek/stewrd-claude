@@ -14,7 +14,8 @@ sidebar sub-item and a top tab in the plugin pane.
 - **Status dot** — top-right of the tab row: idle by default, in-progress
   while saving, green on success (reverting to idle 5s later or on window
   focus, whichever comes first), red with a tooltip on save errors or an
-  on-disk conflict (click it to reload).
+  on-disk conflict (click it to reload). The same color is mirrored on the
+  open tab's sidebar sub-item; other tabs keep the color they last had.
 
 Every path this plugin edits under `~/.claude` (`CLAUDE.md`, `settings.json`,
 `output-styles`, `agents`, `skills`, `commands`) is overridable in this

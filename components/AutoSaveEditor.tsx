@@ -33,7 +33,10 @@ export function AutoSaveEditor({
   }, []);
 
   return (
-    <div style={{ flex: 1, minHeight: 0 }}>
+    // Must be a flex item of a display:flex parent: CodeTextArea's
+    // height="100%" only resolves against a definite (flex-sized) height -
+    // under a plain block parent it becomes auto and grows with the content.
+    <div style={{ flex: 1, minHeight: 0, minWidth: 0 }}>
       {loaded ? (
         // Never render CodeTextArea before the load resolves, and key it
         // on path+generation (not just path) - CodeMirror records every

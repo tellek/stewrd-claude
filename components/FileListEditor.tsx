@@ -61,9 +61,12 @@ export function FileListEditor({
   if (selected) {
     const relPath = kind === "skill" ? `${dirRelPath}/${selected}/SKILL.md` : `${dirRelPath}/${selected}`;
     return (
-      <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, minWidth: 0 }}>
         <api.ui.Link label="← Back" onClick={() => setSelected(null)} />
-        <div style={{ flex: 1, minHeight: 0, marginTop: 8 }}>
+        {/* display:flex is load-bearing: AutoSaveEditor's flex:1 (and so
+            CodeTextArea's height:100%) is ignored under a block parent, which
+            let the editor grow to its content height and overflow the pane. */}
+        <div style={{ flex: 1, minHeight: 0, minWidth: 0, marginTop: 8, display: "flex" }}>
           <AutoSaveEditor api={api} home={home} relPath={relPath} language="markdown" onStatusChange={onStatusChange} />
         </div>
       </div>
@@ -112,7 +115,18 @@ export function FileListEditor({
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "auto", ...scrollbarStyle(api.theme.palette) }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        flex: 1,
+        minHeight: 0,
+        minWidth: 0,
+        overflow: "auto",
+        overflowWrap: "anywhere",
+        ...scrollbarStyle(api.theme.palette),
+      }}
+    >
       <h3 style={{ color: api.theme.palette.text }}>{title}</h3>
       {!listLoaded && <api.ui.Skeleton height={100} width="100%" />}
       {listLoaded &&
@@ -122,8 +136,12 @@ export function FileListEditor({
       {listLoaded && entries.length === 0 && (
         <p style={{ color: api.theme.palette.textMuted }}>None Found</p>
       )}
-      <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
-        <api.ui.TextBox value={newName} onChange={setNewName} placeholder="New Name" readOnly={creating} />
+      {/* flexWrap + the minWidth:0 TextBox wrapper: the textarea's intrinsic
+          (cols-based) width would otherwise set this row's minimum width. */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12, alignItems: "center" }}>
+        <div style={{ flex: "1 1 120px", minWidth: 0 }}>
+          <api.ui.TextBox value={newName} onChange={setNewName} placeholder="New Name" readOnly={creating} />
+        </div>
         <api.ui.TextButton label="Create New" variant="primary" onClick={handleCreate} disabled={creating} />
       </div>
       {createError && <api.ui.Banner message={createError} tone="error" onDismiss={() => setCreateError(undefined)} />}

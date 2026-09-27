@@ -1,11 +1,12 @@
 /// <reference path="./.stewrd/plugin-api.d.ts" />
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import type { PluginApi, PluginContext } from "stewrd-plugin-api";
+import type { PluginApi, PluginContext, StatusColor } from "stewrd-plugin-api";
 import { createClaudeHome, type ClaudeHome } from "./lib/claudeHome";
 import { DEFAULT_PLUGIN_PATHS, loadPluginPaths, type PluginPaths } from "./lib/pluginPaths";
 import { IDLE_DOT, type SaveStatusDot } from "./lib/useSaveStatusDot";
 import { AutoSaveEditor } from "./components/AutoSaveEditor";
 import { FileListEditor } from "./components/FileListEditor";
+import { scrollbarStyle } from "./components/scrollbarStyle";
 
 type TabId = "rules" | "settings" | "output-styles" | "agents" | "skills" | "commands";
 
@@ -43,13 +44,20 @@ function createTabStore(initial: TabId) {
 
 const tabStore = createTabStore("rules");
 
-export function activate(ctx: PluginContext) {
-  if (ctx.signal.aborted) return;
-  ctx.api.statusIcon.set("idle");
+/** Module-level for the same reason as tabStore: the sidebar sub-items (and
+ * their per-tab save-status dot colors) outlive any one mounted Component,
+ * and ctx is only handed to activate(). */
+let activeCtx: PluginContext | null = null;
+const tabColors: Partial<Record<TabId, StatusColor>> = {};
+
+function publishSidebarItems() {
+  const ctx = activeCtx;
+  if (!ctx || ctx.signal.aborted) return;
   ctx.api.sidebar.setItems(
     TABS.map((t) => ({
       id: t.id,
       label: t.label,
+      color: tabColors[t.id] ?? "idle",
       onClick: () => {
         if (ctx.signal.aborted) return;
         tabStore.set(t.id);
@@ -57,6 +65,19 @@ export function activate(ctx: PluginContext) {
       },
     })),
   );
+}
+
+function setTabColor(tab: TabId, color: StatusColor) {
+  if (tabColors[tab] === color) return;
+  tabColors[tab] = color;
+  publishSidebarItems();
+}
+
+export function activate(ctx: PluginContext) {
+  if (ctx.signal.aborted) return;
+  activeCtx = ctx;
+  ctx.api.statusIcon.set("idle");
+  publishSidebarItems();
   ctx.api.sidebar.setSelected(tabStore.get());
 }
 
@@ -75,7 +96,16 @@ export function Component({ api }: { api: PluginApi }) {
   const tab = useSyncExternalStore(tabStore.subscribe, tabStore.get);
   const home: ClaudeHome = useMemo(() => createClaudeHome(api), [api]);
   const [paths, setPaths] = useState<PluginPaths>(DEFAULT_PLUGIN_PATHS);
-  const [dot, setDot] = useState<SaveStatusDot>(IDLE_DOT);
+  // Each dot is tagged with the tab whose editor reported it, so the outgoing
+  // editor's unmount-time IDLE report (or a stale dot from the previous tab)
+  // is never attributed to the newly active tab.
+  const [reported, setReported] = useState<{ tab: TabId; dot: SaveStatusDot }>({ tab, dot: IDLE_DOT });
+  const dot = reported.tab === tab ? reported.dot : IDLE_DOT;
+  const setDot = (d: SaveStatusDot) => setReported({ tab, dot: d });
+
+  useEffect(() => {
+    if (reported.tab === tab) setTabColor(tab, reported.dot.color);
+  }, [reported, tab]);
 
   useEffect(() => {
     let cancelled = false;
@@ -93,14 +123,30 @@ export function Component({ api }: { api: PluginApi }) {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <api.ui.Tabs tabs={TABS.map(({ id, label }) => ({ value: id, label }))} value={tab} onChange={setTab} />
-        <span title={dot.tooltip} onClick={dot.onClick} style={{ cursor: dot.onClick ? "pointer" : "default" }}>
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        {/* api.ui.Tabs is a plain non-wrapping flex row; without minWidth:0 its
+            min-content width (all tab buttons) would force this row, and the
+            whole pane, wider than the container. It scrolls horizontally here
+            instead, while the dot keeps its size at the right edge. */}
+        <div
+          style={{
+            display: "flex",
+            flex: 1,
+            minWidth: 0,
+            overflowX: "auto",
+            overflowY: "hidden",
+            whiteSpace: "nowrap",
+            ...scrollbarStyle(api.theme.palette),
+          }}
+        >
+          <api.ui.Tabs tabs={TABS.map(({ id, label }) => ({ value: id, label }))} value={tab} onChange={setTab} />
+        </div>
+        <span title={dot.tooltip} onClick={dot.onClick} style={{ flexShrink: 0, cursor: dot.onClick ? "pointer" : "default" }}>
           <api.ui.StatusDot color={dot.color} />
         </span>
       </div>
-      <div style={{ flex: 1, minHeight: 0, marginTop: 12, display: "flex" }}>
+      <div style={{ flex: 1, minHeight: 0, minWidth: 0, marginTop: 12, display: "flex" }}>
         {tab === "rules" && (
           <AutoSaveEditor api={api} home={home} relPath={paths.claudeMdPath} language="markdown" onStatusChange={setDot} />
         )}
