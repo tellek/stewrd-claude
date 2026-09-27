@@ -6,5 +6,6 @@
   "outputStylesDir": "output-styles",
   "agentsDir": "agents",
   "skillsDir": "skills",
-  "commandsDir": "commands"
+  "commandsDir": "commands",
+  "saveDelayMs": 3000
 }

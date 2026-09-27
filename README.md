@@ -14,7 +14,8 @@ sidebar sub-item and a top tab in the plugin pane.
   enabled/disabled, or deleted (with confirmation); a "Create New <Kind>" row
   at the bottom prompts for a name and opens the new blank file. The main
   area shows "Load a(n) <Kind> to continue." until an entry is picked. Entries
-  are listed enabled-first, each group alphabetical.
+  are listed enabled-first, each group alphabetical. Each tab remembers which
+  entry (if any) was last open and reopens it automatically next time.
   - **Enable/Disable:** Claude Code has no native disabled flag for these, so
     disabling an entry moves it into a sibling `<dir>-disabled` folder (e.g.
     `agents-disabled`) that Claude Code doesn't scan; enabling moves it back.
@@ -26,12 +27,17 @@ sidebar sub-item and a top tab in the plugin pane.
   four drawer-based tabs): idle by default, in-progress while saving, green
   on success (reverting to idle after a fixed 5s, regardless of window/plugin
   focus), red with a tooltip on save errors or an on-disk conflict (click it
-  to reload). Each tab's own status is mirrored independently onto its own
-  sidebar sub-item as it's reported, not just whichever tab is currently open.
+  to reload). Idle also covers just having loaded/opened a file — the dot
+  only turns green after an actual save, never on load alone. Each tab's own
+  status is mirrored independently onto its own sidebar sub-item as it's
+  reported, not just whichever tab is currently open.
+- **Save delay** — every editor auto-saves 3 seconds (configurable, see
+  below) after the last keystroke, not on every change.
 
 Every path this plugin edits under `~/.claude` (`CLAUDE.md`, `settings.json`,
-`output-styles`, `agents`, `skills`, `commands`) is overridable in this
-plugin's own `settings.json` — see `lib/pluginPaths.ts`. Defaults are all
+`output-styles`, `agents`, `skills`, `commands`), as well as the save delay
+(`saveDelayMs`, milliseconds, default `3000`), is overridable in this
+plugin's own `settings.json` — see `lib/pluginPaths.ts`. Path defaults are all
 relative to `~/.claude`, so they work unmodified on any machine.
 
 ## How it edits `~/.claude`

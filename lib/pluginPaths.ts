@@ -15,7 +15,11 @@ export interface PluginPaths {
   agentsDir: string;
   skillsDir: string;
   commandsDir: string;
+  /** Autosave debounce for every editor in this plugin, in milliseconds. */
+  saveDelayMs: number;
 }
+
+const MIN_SAVE_DELAY_MS = 250;
 
 // Defaults are relative to ~/.claude, so they work unmodified on any
 // machine - only override in settings.json for a non-standard layout.
@@ -26,7 +30,18 @@ export const DEFAULT_PLUGIN_PATHS: PluginPaths = {
   agentsDir: "agents",
   skillsDir: "skills",
   commandsDir: "commands",
+  saveDelayMs: 3000,
 };
+
+// settings.json is user-edited raw JSON (Settings > Plugins > Configure), so
+// unlike the path fields (which fail visibly - file not found - if wrong),
+// a bad saveDelayMs (0, negative, non-numeric) would silently make every
+// keystroke trigger an immediate PowerShell write with no visible error.
+function sanitizeSaveDelayMs(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= MIN_SAVE_DELAY_MS
+    ? value
+    : DEFAULT_PLUGIN_PATHS.saveDelayMs;
+}
 
 export async function loadPluginPaths(api: PluginApi): Promise<PluginPaths> {
   try {
@@ -55,7 +70,7 @@ try {
     const parsed = JSON.parse(lines[lines.length - 1] ?? "{}") as { exists: boolean; content?: string };
     if (!parsed.exists || !parsed.content) return DEFAULT_PLUGIN_PATHS;
     const settings = JSON.parse(parsed.content) as Partial<PluginPaths>;
-    return { ...DEFAULT_PLUGIN_PATHS, ...settings };
+    return { ...DEFAULT_PLUGIN_PATHS, ...settings, saveDelayMs: sanitizeSaveDelayMs(settings.saveDelayMs) };
   } catch {
     return DEFAULT_PLUGIN_PATHS;
   }

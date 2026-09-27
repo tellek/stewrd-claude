@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { PluginApi } from "stewrd-plugin-api";
 import type { ClaudeHome } from "../lib/claudeHome";
 import type { SaveStatusDot } from "../lib/useSaveStatusDot";
@@ -58,6 +58,7 @@ export function FileListEditor({
   kind,
   drawerOpen,
   onDrawerOpenChange,
+  debounceMs,
   onStatusChange,
 }: {
   api: PluginApi;
@@ -69,6 +70,7 @@ export function FileListEditor({
   kind: "file" | "skill";
   drawerOpen: boolean;
   onDrawerOpenChange: (open: boolean) => void;
+  debounceMs: number;
   onStatusChange?: (dot: SaveStatusDot) => void;
 }) {
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -76,6 +78,8 @@ export function FileListEditor({
   const [selected, setSelected] = useState<Entry | null>(null);
   const [selectedDirty, setSelectedDirty] = useState(false);
   const [pendingOp, setPendingOp] = useState<Set<string>>(new Set());
+  const restoredRef = useRef(false);
+  const storageKey = `lastSelected:${dirRelPath}`;
 
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
@@ -110,8 +114,22 @@ export function FileListEditor({
       ].sort((a, b) => Number(b.enabled) - Number(a.enabled) || a.name.localeCompare(b.name));
       setEntries(merged);
       setListLoaded(true);
+      // Restore the last-opened entry for this tab, once per mount only -
+      // refresh() re-runs after every create/rename/toggle/delete too, and
+      // we don't want to re-fire this restore (or stomp a selection made in
+      // the meantime) each time. If the user picks something while this
+      // storage round-trip is in flight, that pick wins: only apply the
+      // restored value if `selected` is still null when it resolves.
+      if (!restoredRef.current) {
+        restoredRef.current = true;
+        api.storage.get<Entry>(storageKey).then((stored) => {
+          if (!stored) return;
+          const match = merged.find((e) => e.name === stored.name && e.enabled === stored.enabled);
+          if (match) setSelected((prev) => prev ?? match);
+        });
+      }
     });
-  }, [home, dirRelPath, disabledDirRelPath, kind]);
+  }, [home, dirRelPath, disabledDirRelPath, kind, api, storageKey]);
 
   useEffect(() => {
     refresh();
@@ -153,6 +171,7 @@ export function FileListEditor({
           setCreateOpen(false);
           refresh();
           setSelected({ name: trimmed, enabled: true });
+          api.storage.set(storageKey, { name: trimmed, enabled: true });
           onDrawerOpenChange(false);
         } else if (result.status === "exists") {
           setCreateError("Already Exists");
@@ -169,6 +188,7 @@ export function FileListEditor({
           setCreateOpen(false);
           refresh();
           setSelected({ name: filename, enabled: true });
+          api.storage.set(storageKey, { name: filename, enabled: true });
           onDrawerOpenChange(false);
         } else if (result.status === "exists") {
           setCreateError("Already Exists");
@@ -212,7 +232,9 @@ export function FileListEditor({
         setRenameTarget(null);
         refresh();
         if (selected && entryKey(selected) === key) {
-          setSelected({ name: newEntryName, enabled: target.enabled });
+          const next = { name: newEntryName, enabled: target.enabled };
+          setSelected(next);
+          api.storage.set(storageKey, next);
         }
       } else if (result.status === "exists") {
         setRenameError("Already Exists");
@@ -232,7 +254,10 @@ export function FileListEditor({
       const result = await home.renameEntry(fromMoveArg, toMoveArg, kind === "skill" ? "dir" : "file");
       if (result.status === "ok") {
         refresh();
-        if (selected && entryKey(selected) === key) setSelected(null);
+        if (selected && entryKey(selected) === key) {
+          setSelected(null);
+          api.storage.set(storageKey, null);
+        }
       } else if (result.status === "exists") {
         setBanner("Already Exists In Target Location — Rename First");
       } else {
@@ -251,7 +276,10 @@ export function FileListEditor({
       const result = await home.deleteEntry(relPath, kind === "skill" ? "dir" : "file");
       if (result.status === "ok") {
         refresh();
-        if (selected && entryKey(selected) === key) setSelected(null);
+        if (selected && entryKey(selected) === key) {
+          setSelected(null);
+          api.storage.set(storageKey, null);
+        }
       } else {
         setBanner(result.message ?? "Delete Failed");
       }
@@ -266,6 +294,7 @@ export function FileListEditor({
           home={home}
           relPath={relPathOf(selected)}
           language="markdown"
+          debounceMs={debounceMs}
           onStatusChange={onStatusChange}
           onDirtyChange={setSelectedDirty}
         />
@@ -326,6 +355,7 @@ export function FileListEditor({
                         variant="secondary"
                         onClick={() => {
                           setSelected(entry);
+                          api.storage.set(storageKey, entry);
                           onDrawerOpenChange(false);
                         }}
                       />

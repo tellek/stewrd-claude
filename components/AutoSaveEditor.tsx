@@ -9,6 +9,7 @@ export function AutoSaveEditor({
   home,
   relPath,
   language,
+  debounceMs,
   validate,
   onStatusChange,
   onDirtyChange,
@@ -17,11 +18,12 @@ export function AutoSaveEditor({
   home: ClaudeHome;
   relPath: string;
   language: "json" | "markdown";
+  debounceMs: number;
   validate?: (text: string) => string | null;
   onStatusChange?: (dot: SaveStatusDot) => void;
   onDirtyChange?: (dirty: boolean) => void;
 }) {
-  const { text, setText, loaded, status, errorMessage, reload, loadGeneration, dirty } = useAutoSaveFile(home, relPath, validate);
+  const { text, setText, loaded, status, errorMessage, reload, loadGeneration, dirty } = useAutoSaveFile(home, relPath, debounceMs, validate);
   const dot = useSaveStatusDot(status, errorMessage, reload);
 
   useEffect(() => {

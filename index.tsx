@@ -178,7 +178,14 @@ export function Component({ api }: { api: PluginApi }) {
       </div>
       <div style={{ flex: 1, minHeight: 0, minWidth: 0, marginTop: 12, display: "flex" }}>
         {tab === "rules" && (
-          <AutoSaveEditor api={api} home={home} relPath={paths.claudeMdPath} language="markdown" onStatusChange={setDot} />
+          <AutoSaveEditor
+            api={api}
+            home={home}
+            relPath={paths.claudeMdPath}
+            language="markdown"
+            debounceMs={paths.saveDelayMs}
+            onStatusChange={setDot}
+          />
         )}
         {tab === "settings" && (
           <AutoSaveEditor
@@ -186,6 +193,7 @@ export function Component({ api }: { api: PluginApi }) {
             home={home}
             relPath={paths.settingsJsonPath}
             language="json"
+            debounceMs={paths.saveDelayMs}
             validate={jsonValidate}
             onStatusChange={setDot}
           />
@@ -201,6 +209,7 @@ export function Component({ api }: { api: PluginApi }) {
             kind="file"
             drawerOpen={loadDrawerOpen}
             onDrawerOpenChange={setLoadDrawerOpen}
+            debounceMs={paths.saveDelayMs}
             onStatusChange={setDot}
           />
         )}
@@ -215,6 +224,7 @@ export function Component({ api }: { api: PluginApi }) {
             kind="file"
             drawerOpen={loadDrawerOpen}
             onDrawerOpenChange={setLoadDrawerOpen}
+            debounceMs={paths.saveDelayMs}
             onStatusChange={setDot}
           />
         )}
@@ -229,6 +239,7 @@ export function Component({ api }: { api: PluginApi }) {
             kind="file"
             drawerOpen={loadDrawerOpen}
             onDrawerOpenChange={setLoadDrawerOpen}
+            debounceMs={paths.saveDelayMs}
             onStatusChange={setDot}
           />
         )}
@@ -243,6 +254,7 @@ export function Component({ api }: { api: PluginApi }) {
             kind="skill"
             drawerOpen={loadDrawerOpen}
             onDrawerOpenChange={setLoadDrawerOpen}
+            debounceMs={paths.saveDelayMs}
             onStatusChange={setDot}
           />
         )}

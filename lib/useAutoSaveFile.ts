@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ClaudeHome } from "./claudeHome";
 
-export type SaveStatus = "loading" | "saved" | "saving" | "error" | "conflict";
+export type SaveStatus = "loading" | "idle" | "saved" | "saving" | "error" | "conflict";
 
 export interface UseAutoSaveFileResult {
   text: string;
@@ -33,8 +33,6 @@ interface LoadedState {
   loaded: boolean;
 }
 
-const DEBOUNCE_MS = 600;
-
 /** Auto-saving buffer for a single ~/.claude file. Owns {path, text, loaded,
  * loadGeneration} as one unit: switching `relPath` (or calling `reload`)
  * flushes any pending edit against the file being left (via the effect
@@ -45,6 +43,7 @@ const DEBOUNCE_MS = 600;
 export function useAutoSaveFile(
   home: ClaudeHome,
   relPath: string,
+  debounceMs: number,
   validate?: (text: string) => string | null,
 ): UseAutoSaveFileResult {
   const [text, setTextState] = useState("");
@@ -75,7 +74,10 @@ export function useAutoSaveFile(
         current.current = { path, gen, text: result.text, lastSaved: result.text, crlf: result.crlf, bom: result.bom, loaded: true };
         setTextState(result.text);
         setLoaded(true);
-        setStatus("saved");
+        // "idle", not "saved": nothing was actually saved just now, this is
+        // only a read. Using "saved" here made the dot flash green on every
+        // load/reload with no real save behind it.
+        setStatus("idle");
       },
       (err) => {
         if (cancelled) return;
@@ -151,9 +153,9 @@ export function useAutoSaveFile(
             setErrorMessage(String((err as Error)?.message ?? err));
           },
         );
-      }, DEBOUNCE_MS);
+      }, debounceMs);
     },
-    [home, validate],
+    [home, validate, debounceMs],
   );
 
   const reload = useCallback(() => setReloadTick((n) => n + 1), []);
