@@ -107,7 +107,7 @@ export function FileListEditor({
       const merged: Entry[] = [
         ...activeNames.map((name) => ({ name, enabled: true })),
         ...disabledNames.map((name) => ({ name, enabled: false })),
-      ].sort((a, b) => a.name.localeCompare(b.name) || Number(b.enabled) - Number(a.enabled));
+      ].sort((a, b) => Number(b.enabled) - Number(a.enabled) || a.name.localeCompare(b.name));
       setEntries(merged);
       setListLoaded(true);
     });
@@ -272,52 +272,79 @@ export function FileListEditor({
       ) : (
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <p style={{ color: api.theme.palette.textMuted }}>
-            Load {itemLabel === "Output Style" ? "An" : "A"} {itemLabel} To Continue.
+            Load {/^[aeiou]/i.test(itemLabel) ? "an" : "a"} {itemLabel.toLowerCase()} to continue.
           </p>
         </div>
       )}
 
-      <api.ui.Drawer open={drawerOpen} onClose={() => onDrawerOpenChange(false)} side="right" size={320} title={title}>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 4,
-            overflow: "auto",
-            minHeight: 0,
-            ...scrollbarStyle(api.theme.palette),
-          }}
-        >
-          {banner && <api.ui.Banner message={banner} tone="error" onDismiss={() => setBanner(undefined)} />}
-          {!listLoaded && <api.ui.Skeleton height={100} width="100%" />}
-          {listLoaded && entries.length === 0 && <p style={{ color: api.theme.palette.textMuted }}>None Found</p>}
-          {listLoaded &&
-            entries.map((entry) => {
-              const key = entryKey(entry);
-              const isSelected = selected !== null && entryKey(selected) === key;
-              const rowBusy = pendingOp.has(key) || (isSelected && selectedDirty);
-              return (
-                <div key={key} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <api.ui.TextButton
-                      label={entry.name}
-                      variant="secondary"
-                      onClick={() => {
-                        setSelected(entry);
-                        onDrawerOpenChange(false);
-                      }}
-                    />
-                    {!entry.enabled && <span style={{ color: api.theme.palette.textMuted, fontSize: 12 }}> (Disabled)</span>}
+      <api.ui.Drawer open={drawerOpen} onClose={() => onDrawerOpenChange(false)} side="right" size={400}>
+        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+          <h3 style={{ marginTop: 0, color: api.theme.palette.text }}>{title}</h3>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 4,
+              flex: 1,
+              minHeight: 0,
+              overflow: "auto",
+              ...scrollbarStyle(api.theme.palette),
+            }}
+          >
+            {banner && <api.ui.Banner message={banner} tone="error" onDismiss={() => setBanner(undefined)} />}
+            {!listLoaded && <api.ui.Skeleton height={100} width="100%" />}
+            {listLoaded && entries.length === 0 && <p style={{ color: api.theme.palette.textMuted }}>None Found</p>}
+            {listLoaded &&
+              entries.map((entry) => {
+                const key = entryKey(entry);
+                const isSelected = selected !== null && entryKey(selected) === key;
+                const rowBusy = pendingOp.has(key) || (isSelected && selectedDirty);
+                const toggleTitle = isSelected && selectedDirty
+                  ? "Save Pending — Finish Editing First"
+                  : entry.enabled
+                    ? "Click To Disable"
+                    : "Click To Enable";
+                return (
+                  <div
+                    key={key}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                      border: `1px solid ${api.theme.palette.border}`,
+                      borderRadius: 6,
+                      background: api.theme.palette.surface,
+                      padding: "6px 8px",
+                    }}
+                  >
+                    <div
+                      style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden" }}
+                      title={entry.name}
+                    >
+                      <api.ui.TextButton
+                        label={entry.name}
+                        variant="secondary"
+                        onClick={() => {
+                          setSelected(entry);
+                          onDrawerOpenChange(false);
+                        }}
+                      />
+                    </div>
+                    <div
+                      title={toggleTitle}
+                      style={{ width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+                    >
+                      <api.ui.Toggle checked={entry.enabled} onChange={() => handleToggle(entry)} disabled={rowBusy} />
+                    </div>
+                    <api.ui.IconButton icon={renameIcon} label="Rename" onClick={() => openRename(entry)} disabled={rowBusy} />
+                    <api.ui.IconButton icon={trashIcon} label="Delete" onClick={() => setDeleteTarget(entry)} disabled={rowBusy} />
                   </div>
-                  <span title={isSelected && selectedDirty ? "Save Pending — Finish Editing First" : undefined}>
-                    <api.ui.Toggle checked={entry.enabled} onChange={() => handleToggle(entry)} disabled={rowBusy} />
-                  </span>
-                  <api.ui.IconButton icon={renameIcon} label="Rename" onClick={() => openRename(entry)} disabled={rowBusy} />
-                  <api.ui.IconButton icon={trashIcon} label="Delete" onClick={() => setDeleteTarget(entry)} disabled={rowBusy} />
-                </div>
-              );
-            })}
-          <api.ui.TextButton label={`Create New ${itemLabel}`} variant="primary" onClick={openCreate} />
+                );
+              })}
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <api.ui.TextButton label={`Create New ${itemLabel}`} variant="primary" onClick={openCreate} />
+          </div>
         </div>
       </api.ui.Drawer>
 

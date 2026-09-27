@@ -114,12 +114,18 @@ export function Component({ api }: { api: PluginApi }) {
   // is never attributed to the newly active tab.
   const [reported, setReported] = useState<{ tab: TabId; dot: SaveStatusDot }>({ tab, dot: IDLE_DOT });
   const dot = reported.tab === tab ? reported.dot : IDLE_DOT;
-  const setDot = (d: SaveStatusDot) => setReported({ tab, dot: d });
+  // Mirrors to the sidebar immediately, not through a useEffect over this
+  // batched state - React batches an outgoing tab's unmount cleanup together
+  // with an incoming tab's mount effect in the same commit, so an effect
+  // watching `reported` would only ever see the last write and silently drop
+  // the outgoing tab's own IDLE_DOT report (leaving its sidebar dot stuck
+  // green). setTabColor works off the module-level activeCtx, so it's safe
+  // to call here even while the calling component is mid-unmount.
+  const setDot = (d: SaveStatusDot) => {
+    setReported({ tab, dot: d });
+    setTabColor(tab, d.color);
+  };
   const [loadDrawerOpen, setLoadDrawerOpen] = useState(false);
-
-  useEffect(() => {
-    if (reported.tab === tab) setTabColor(tab, reported.dot.color);
-  }, [reported, tab]);
 
   useEffect(() => {
     setLoadDrawerOpen(false);
@@ -146,7 +152,8 @@ export function Component({ api }: { api: PluginApi }) {
         {/* api.ui.Tabs is a plain non-wrapping flex row; without minWidth:0 its
             min-content width (all tab buttons) would force this row, and the
             whole pane, wider than the container. It scrolls horizontally here
-            instead, while the dot keeps its size at the right edge. */}
+            instead, while the dot and Load button keep their size at the
+            right edge (Load is the rightmost element). */}
         <div
           style={{
             display: "flex",
@@ -160,14 +167,14 @@ export function Component({ api }: { api: PluginApi }) {
         >
           <api.ui.Tabs tabs={TABS.map(({ id, label }) => ({ value: id, label }))} value={tab} onChange={setTab} />
         </div>
+        <span title={dot.tooltip} onClick={dot.onClick} style={{ flexShrink: 0, cursor: dot.onClick ? "pointer" : "default" }}>
+          <api.ui.StatusDot color={dot.color} />
+        </span>
         {isFileListTab(tab) && (
           <div style={{ flexShrink: 0 }}>
             <api.ui.TextButton label="Load" onClick={() => setLoadDrawerOpen(true)} />
           </div>
         )}
-        <span title={dot.tooltip} onClick={dot.onClick} style={{ flexShrink: 0, cursor: dot.onClick ? "pointer" : "default" }}>
-          <api.ui.StatusDot color={dot.color} />
-        </span>
       </div>
       <div style={{ flex: 1, minHeight: 0, minWidth: 0, marginTop: 12, display: "flex" }}>
         {tab === "rules" && (

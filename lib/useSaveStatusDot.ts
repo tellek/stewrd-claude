@@ -13,9 +13,8 @@ export const IDLE_DOT: SaveStatusDot = { color: "idle", tooltip: "Idle" };
 const IDLE_AFTER_SUCCESS_MS = 5000;
 
 /** Derives a top-right status dot from raw save status: in-progress while
- * saving, green on success (reverting to idle after 5s or whenever the
- * window regains focus - whichever comes first), red with a tooltip on
- * error/conflict. */
+ * saving, green on success (reverting to idle exactly 5s later, regardless
+ * of window/plugin focus), red with a tooltip on error/conflict. */
 export function useSaveStatusDot(status: SaveStatus, errorMessage: string | undefined, onReload: () => void): SaveStatusDot {
   const [dot, setDot] = useState<SaveStatusDot>(IDLE_DOT);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -42,14 +41,6 @@ export function useSaveStatusDot(status: SaveStatus, errorMessage: string | unde
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, errorMessage]);
-
-  useEffect(() => {
-    const onFocus = () => {
-      setDot((current) => (current.color === "success" ? IDLE_DOT : current));
-    };
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, []);
 
   return dot;
 }

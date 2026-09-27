@@ -13,18 +13,21 @@ sidebar sub-item and a top tab in the plugin pane.
   for Skills). Each row can be opened (click the name), renamed, toggled
   enabled/disabled, or deleted (with confirmation); a "Create New <Kind>" row
   at the bottom prompts for a name and opens the new blank file. The main
-  area shows "Load a(n) <Kind> To Continue." until an entry is picked.
+  area shows "Load a(n) <Kind> to continue." until an entry is picked. Entries
+  are listed enabled-first, each group alphabetical.
   - **Enable/Disable:** Claude Code has no native disabled flag for these, so
     disabling an entry moves it into a sibling `<dir>-disabled` folder (e.g.
     `agents-disabled`) that Claude Code doesn't scan; enabling moves it back.
-    The drawer lists both folders together, tagging disabled entries.
+    The drawer lists both folders together, via a toggle per row (tooltip
+    explains its state).
   - Rename/enable-disable/delete are disabled for the currently-open entry
     while it has unsaved edits, to avoid racing the autosave debounce.
-- **Status dot** — top-right of the tab row: idle by default, in-progress
-  while saving, green on success (reverting to idle 5s later or on window
-  focus, whichever comes first), red with a tooltip on save errors or an
-  on-disk conflict (click it to reload). The same color is mirrored on the
-  open tab's sidebar sub-item; other tabs keep the color they last had.
+- **Status dot** — next to the tab row (Load button sits to its right on the
+  four drawer-based tabs): idle by default, in-progress while saving, green
+  on success (reverting to idle after a fixed 5s, regardless of window/plugin
+  focus), red with a tooltip on save errors or an on-disk conflict (click it
+  to reload). Each tab's own status is mirrored independently onto its own
+  sidebar sub-item as it's reported, not just whichever tab is currently open.
 
 Every path this plugin edits under `~/.claude` (`CLAUDE.md`, `settings.json`,
 `output-styles`, `agents`, `skills`, `commands`) is overridable in this
