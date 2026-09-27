@@ -1,0 +1,9 @@
+{
+  "id": "claude-control",
+  "name": "Claude Control",
+  "icon": "default",
+  "entry": "dist/index.js",
+  "description": "Edit global Claude Code configuration: rules, settings, output styles, agents, skills, and commands.",
+  "apiVersion": "1",
+  "background": false
+}
