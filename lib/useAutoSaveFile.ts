@@ -11,6 +11,16 @@ export interface UseAutoSaveFileResult {
   errorMessage?: string;
   reload: () => void;
   loadGeneration: number;
+  /** True whenever `text` differs from the last successfully-saved content -
+   * i.e. there's an edit that hasn't landed on disk yet, whether still
+   * debouncing, mid-save, or stuck in error/conflict. Unlike `status`, this
+   * never flips back to false on its own (timer/focus-driven `IDLE_DOT`
+   * resets, save-in-progress-for-an-older-keystroke, etc.) - only a
+   * successful save of the current text, or the user reverting back to the
+   * saved text, clears it. Callers that must not disturb an unsaved edit
+   * (rename/move/delete of the open file) should gate on this, not on
+   * `status`. */
+  dirty: boolean;
 }
 
 interface LoadedState {
@@ -42,6 +52,7 @@ export function useAutoSaveFile(
   const [status, setStatus] = useState<SaveStatus>("loading");
   const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined);
   const [reloadTick, setReloadTick] = useState(0);
+  const [dirty, setDirty] = useState(false);
 
   const current = useRef<LoadedState>({ path: relPath, gen: reloadTick, text: "", lastSaved: "", crlf: false, bom: false, loaded: false });
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -56,6 +67,7 @@ export function useAutoSaveFile(
     setLoaded(false);
     setStatus("loading");
     setErrorMessage(undefined);
+    setDirty(false);
 
     home.readFile(path).then(
       (result) => {
@@ -93,6 +105,7 @@ export function useAutoSaveFile(
     (newText: string) => {
       current.current.text = newText;
       setTextState(newText);
+      setDirty(newText !== current.current.lastSaved);
       if (!current.current.loaded) return;
 
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -102,7 +115,10 @@ export function useAutoSaveFile(
         debounceRef.current = null;
         const snap = current.current;
         if (snap.path !== path || snap.gen !== gen) return;
-        if (snap.text === snap.lastSaved) return;
+        if (snap.text === snap.lastSaved) {
+          setDirty(false);
+          return;
+        }
 
         if (validate) {
           const validationError = validate(snap.text);
@@ -121,6 +137,7 @@ export function useAutoSaveFile(
               current.current.lastSaved = snap.text;
               setStatus("saved");
               setErrorMessage(undefined);
+              setDirty(current.current.text !== current.current.lastSaved);
             } else if (result.status === "conflict") {
               setStatus("conflict");
             } else {
@@ -141,5 +158,5 @@ export function useAutoSaveFile(
 
   const reload = useCallback(() => setReloadTick((n) => n + 1), []);
 
-  return { text, setText, loaded, status, errorMessage, reload, loadGeneration: reloadTick };
+  return { text, setText, loaded, status, errorMessage, reload, loadGeneration: reloadTick, dirty };
 }

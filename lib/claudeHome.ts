@@ -26,6 +26,8 @@ export interface ClaudeHome {
   listDir(relDir: string, kind: "file" | "dir"): Promise<string[]>;
   createFile(relPath: string, text: string): Promise<WriteResult>;
   createSkill(dirRelPath: string, name: string, skillMdText: string): Promise<WriteResult>;
+  deleteEntry(relPath: string, kind: "file" | "dir"): Promise<WriteResult>;
+  renameEntry(fromRelPath: string, toRelPath: string, kind: "file" | "dir"): Promise<WriteResult>;
 }
 
 const ABSENT = "__ABSENT__";
@@ -260,5 +262,68 @@ try {
     return createFile(`${dirRelPath}/${name}/SKILL.md`, skillMdText);
   }
 
-  return { readFile, writeFile, listDir, createFile, createSkill };
+  async function deleteEntry(relPath: string, kind: "file" | "dir"): Promise<WriteResult> {
+    return enqueue(relPath, async () => {
+      const recurse = kind === "dir" ? " -Recurse" : "";
+      const script = `
+$ErrorActionPreference = 'Stop'
+$dst = Join-Path $env:USERPROFILE ".claude"
+$dst = Join-Path $dst $env:RELPATH
+try {
+  if (Test-Path -LiteralPath $dst) { Remove-Item -LiteralPath $dst -Force${recurse} }
+  Write-Output (@{ status = "ok" } | ConvertTo-Json -Compress)
+} catch {
+  Write-Output (@{ status = "error"; message = $_.Exception.Message } | ConvertTo-Json -Compress)
+}`;
+      const result = await execPS(script, { RELPATH: relPath });
+      if (result.code !== 0) return { status: "error", message: result.stderr || "Delete Failed" };
+      // Deliberately do NOT clear mtimes.get(relPath) here: a stale editor
+      // still open on this path may flush a debounced write after this
+      // resolves. Leaving the old mtime cached makes that late write hit
+      // writeFile's non-ABSENT branch and fail as "conflict" instead of
+      // silently recreating the just-deleted file.
+      return parseLastJsonLine<WriteResult>(result.stdout);
+    });
+  }
+
+  async function renameEntry(fromRelPath: string, toRelPath: string, kind: "file" | "dir"): Promise<WriteResult> {
+    return enqueue(fromRelPath, async () => {
+      // Windows PowerShell 5.1 rejects Move-Item when source/destination
+      // differ only by case ("cannot move item onto itself"). Detect a
+      // case-only rename and hop through a temp sibling name instead.
+      const caseOnly = fromRelPath.toLowerCase() === toRelPath.toLowerCase() && fromRelPath !== toRelPath;
+      const script = `
+$ErrorActionPreference = 'Stop'
+$root = Join-Path $env:USERPROFILE ".claude"
+$src = Join-Path $root $env:FROM
+$dst = Join-Path $root $env:TO
+try {
+  if ($env:CASEONLY -eq '1') {
+    $tmp = "$dst.__renaming__$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+    Move-Item -LiteralPath $src -Destination $tmp
+    Move-Item -LiteralPath $tmp -Destination $dst
+    Write-Output (@{ status = "ok" } | ConvertTo-Json -Compress)
+  } elseif (Test-Path -LiteralPath $dst) {
+    Write-Output (@{ status = "exists" } | ConvertTo-Json -Compress)
+  } else {
+    $parent = Split-Path $dst -Parent
+    if (-not (Test-Path -LiteralPath $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+    Move-Item -LiteralPath $src -Destination $dst
+    Write-Output (@{ status = "ok" } | ConvertTo-Json -Compress)
+  }
+} catch {
+  Write-Output (@{ status = "error"; message = $_.Exception.Message } | ConvertTo-Json -Compress)
+}`;
+      const result = await execPS(script, { FROM: fromRelPath, TO: toRelPath, CASEONLY: caseOnly ? "1" : "0" });
+      if (result.code !== 0) return { status: "error", message: result.stderr || "Rename Failed" };
+      // As with deleteEntry: don't clear fromRelPath's cached mtime on
+      // success. A late flush against the old path then fails as
+      // "conflict" rather than recreating the file there post-move. The
+      // destination path has no cached mtime yet either way, so the next
+      // open of it does a normal fresh read.
+      return parseLastJsonLine<WriteResult>(result.stdout);
+    });
+  }
+
+  return { readFile, writeFile, listDir, createFile, createSkill, deleteEntry, renameEntry };
 }

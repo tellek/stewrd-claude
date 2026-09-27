@@ -7,10 +7,19 @@ sidebar sub-item and a top tab in the plugin pane.
 
 - **Global Rules / Global Settings** — full-height auto-saving editors.
   Settings refuses to save invalid JSON.
-- **Output Styles / Agents / Commands** — a rollout list of the flat `*.md`
-  files in that folder, plus "Create New".
-- **Skills** — same rollout, but each entry is a `skills/<name>/SKILL.md`
-  folder.
+- **Output Styles / Agents / Skills / Commands** — a "Load" button next to
+  the status dot opens a right-side drawer listing every entry (flat `*.md`
+  files for Output Styles/Agents/Commands, `skills/<name>/SKILL.md` folders
+  for Skills). Each row can be opened (click the name), renamed, toggled
+  enabled/disabled, or deleted (with confirmation); a "Create New <Kind>" row
+  at the bottom prompts for a name and opens the new blank file. The main
+  area shows "Load a(n) <Kind> To Continue." until an entry is picked.
+  - **Enable/Disable:** Claude Code has no native disabled flag for these, so
+    disabling an entry moves it into a sibling `<dir>-disabled` folder (e.g.
+    `agents-disabled`) that Claude Code doesn't scan; enabling moves it back.
+    The drawer lists both folders together, tagging disabled entries.
+  - Rename/enable-disable/delete are disabled for the currently-open entry
+    while it has unsaved edits, to avoid racing the autosave debounce.
 - **Status dot** — top-right of the tab row: idle by default, in-progress
   while saving, green on success (reverting to idle 5s later or on window
   focus, whichever comes first), red with a tooltip on save errors or an
@@ -46,6 +55,14 @@ none of this is obvious from the code alone:
 - **Create New** uses an exclusive filesystem create (`New-Item` without
   `-Force`), not a check-then-write, so two near-simultaneous creates of the
   same name can't both succeed.
+- **Rename/enable-disable** (`renameEntry`) never `Move-Item -Force`s: it
+  checks the destination first and returns `"exists"` rather than clobbering
+  it, and (for a pure case-change rename, which Windows PowerShell 5.1
+  otherwise rejects as "source and destination are the same") hops through a
+  temporary sibling name. Deletes and renames deliberately leave the old
+  path's cached mtime in place instead of clearing it, so a stale write that
+  lands after the move is rejected as a conflict rather than silently
+  recreating/resurrecting the file.
 
 ## Development
 

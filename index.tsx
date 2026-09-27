@@ -19,6 +19,19 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "commands", label: "Commands" },
 ];
 
+// Singular display name for the four file-list tabs (Load/Create dialogs,
+// placeholder text). Rules/Settings aren't file-list tabs, so they're omitted.
+const ITEM_LABELS: Partial<Record<TabId, string>> = {
+  "output-styles": "Output Style",
+  agents: "Agent",
+  skills: "Skill",
+  commands: "Command",
+};
+
+function isFileListTab(tab: TabId): boolean {
+  return tab in ITEM_LABELS;
+}
+
 /** Module-level, not component-state: sidebar sub-items are registered once
  * in activate() (see below) so they keep working across the many times this
  * plugin's Component mounts/unmounts within one activation - a Component-
@@ -102,10 +115,15 @@ export function Component({ api }: { api: PluginApi }) {
   const [reported, setReported] = useState<{ tab: TabId; dot: SaveStatusDot }>({ tab, dot: IDLE_DOT });
   const dot = reported.tab === tab ? reported.dot : IDLE_DOT;
   const setDot = (d: SaveStatusDot) => setReported({ tab, dot: d });
+  const [loadDrawerOpen, setLoadDrawerOpen] = useState(false);
 
   useEffect(() => {
     if (reported.tab === tab) setTabColor(tab, reported.dot.color);
   }, [reported, tab]);
+
+  useEffect(() => {
+    setLoadDrawerOpen(false);
+  }, [tab]);
 
   useEffect(() => {
     let cancelled = false;
@@ -142,6 +160,11 @@ export function Component({ api }: { api: PluginApi }) {
         >
           <api.ui.Tabs tabs={TABS.map(({ id, label }) => ({ value: id, label }))} value={tab} onChange={setTab} />
         </div>
+        {isFileListTab(tab) && (
+          <div style={{ flexShrink: 0 }}>
+            <api.ui.TextButton label="Load" onClick={() => setLoadDrawerOpen(true)} />
+          </div>
+        )}
         <span title={dot.tooltip} onClick={dot.onClick} style={{ flexShrink: 0, cursor: dot.onClick ? "pointer" : "default" }}>
           <api.ui.StatusDot color={dot.color} />
         </span>
@@ -165,26 +188,56 @@ export function Component({ api }: { api: PluginApi }) {
             api={api}
             home={home}
             title="Output Styles"
+            itemLabel={ITEM_LABELS["output-styles"]!}
             dirRelPath={paths.outputStylesDir}
+            disabledDirRelPath={`${paths.outputStylesDir}-disabled`}
             kind="file"
+            drawerOpen={loadDrawerOpen}
+            onDrawerOpenChange={setLoadDrawerOpen}
             onStatusChange={setDot}
           />
         )}
         {tab === "agents" && (
-          <FileListEditor api={api} home={home} title="Agents" dirRelPath={paths.agentsDir} kind="file" onStatusChange={setDot} />
+          <FileListEditor
+            api={api}
+            home={home}
+            title="Agents"
+            itemLabel={ITEM_LABELS.agents!}
+            dirRelPath={paths.agentsDir}
+            disabledDirRelPath={`${paths.agentsDir}-disabled`}
+            kind="file"
+            drawerOpen={loadDrawerOpen}
+            onDrawerOpenChange={setLoadDrawerOpen}
+            onStatusChange={setDot}
+          />
         )}
         {tab === "commands" && (
           <FileListEditor
             api={api}
             home={home}
             title="Commands"
+            itemLabel={ITEM_LABELS.commands!}
             dirRelPath={paths.commandsDir}
+            disabledDirRelPath={`${paths.commandsDir}-disabled`}
             kind="file"
+            drawerOpen={loadDrawerOpen}
+            onDrawerOpenChange={setLoadDrawerOpen}
             onStatusChange={setDot}
           />
         )}
         {tab === "skills" && (
-          <FileListEditor api={api} home={home} title="Skills" dirRelPath={paths.skillsDir} kind="skill" onStatusChange={setDot} />
+          <FileListEditor
+            api={api}
+            home={home}
+            title="Skills"
+            itemLabel={ITEM_LABELS.skills!}
+            dirRelPath={paths.skillsDir}
+            disabledDirRelPath={`${paths.skillsDir}-disabled`}
+            kind="skill"
+            drawerOpen={loadDrawerOpen}
+            onDrawerOpenChange={setLoadDrawerOpen}
+            onStatusChange={setDot}
+          />
         )}
       </div>
     </div>

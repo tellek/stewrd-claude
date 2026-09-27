@@ -11,6 +11,7 @@ export function AutoSaveEditor({
   language,
   validate,
   onStatusChange,
+  onDirtyChange,
 }: {
   api: PluginApi;
   home: ClaudeHome;
@@ -18,8 +19,9 @@ export function AutoSaveEditor({
   language: "json" | "markdown";
   validate?: (text: string) => string | null;
   onStatusChange?: (dot: SaveStatusDot) => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
-  const { text, setText, loaded, status, errorMessage, reload, loadGeneration } = useAutoSaveFile(home, relPath, validate);
+  const { text, setText, loaded, status, errorMessage, reload, loadGeneration, dirty } = useAutoSaveFile(home, relPath, validate);
   const dot = useSaveStatusDot(status, errorMessage, reload);
 
   useEffect(() => {
@@ -28,7 +30,15 @@ export function AutoSaveEditor({
   }, [dot]);
 
   useEffect(() => {
-    return () => onStatusChange?.(IDLE_DOT);
+    onDirtyChange?.(dirty);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty]);
+
+  useEffect(() => {
+    return () => {
+      onStatusChange?.(IDLE_DOT);
+      onDirtyChange?.(false);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
