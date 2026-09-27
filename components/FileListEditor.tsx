@@ -353,6 +353,7 @@ export function FileListEditor({
                       <api.ui.TextButton
                         label={entry.name}
                         variant="secondary"
+                        bordered={false}
                         onClick={() => {
                           setSelected(entry);
                           api.storage.set(storageKey, entry);

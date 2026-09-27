@@ -16,6 +16,9 @@ sidebar sub-item and a top tab in the plugin pane.
   area shows "Load a(n) <Kind> to continue." until an entry is picked. Entries
   are listed enabled-first, each group alphabetical. Each tab remembers which
   entry (if any) was last open and reopens it automatically next time.
+- **Cursor/scroll memory** — every editor (Rules, Settings, and each opened
+  file-list entry) remembers its cursor position and scroll offset per file
+  and restores them the next time that file is opened.
   - **Enable/Disable:** Claude Code has no native disabled flag for these, so
     disabling an entry moves it into a sibling `<dir>-disabled` folder (e.g.
     `agents-disabled`) that Claude Code doesn't scan; enabling moves it back.
