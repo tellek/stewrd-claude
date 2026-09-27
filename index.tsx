@@ -1,7 +1,9 @@
 /// <reference path="./.stewrd/plugin-api.d.ts" />
-import { useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { PluginApi, PluginContext } from "stewrd-plugin-api";
 import { createClaudeHome, type ClaudeHome } from "./lib/claudeHome";
+import { DEFAULT_PLUGIN_PATHS, loadPluginPaths, type PluginPaths } from "./lib/pluginPaths";
+import { IDLE_DOT, type SaveStatusDot } from "./lib/useSaveStatusDot";
 import { AutoSaveEditor } from "./components/AutoSaveEditor";
 import { FileListEditor } from "./components/FileListEditor";
 
@@ -72,6 +74,18 @@ function jsonValidate(text: string): string | null {
 export function Component({ api }: { api: PluginApi }) {
   const tab = useSyncExternalStore(tabStore.subscribe, tabStore.get);
   const home: ClaudeHome = useMemo(() => createClaudeHome(api), [api]);
+  const [paths, setPaths] = useState<PluginPaths>(DEFAULT_PLUGIN_PATHS);
+  const [dot, setDot] = useState<SaveStatusDot>(IDLE_DOT);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadPluginPaths(api).then((loaded) => {
+      if (!cancelled) setPaths(loaded);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [api]);
 
   const setTab = (next: string) => {
     tabStore.set(next as TabId);
@@ -80,18 +94,52 @@ export function Component({ api }: { api: PluginApi }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
-      <api.ui.Tabs tabs={TABS.map(({ id, label }) => ({ value: id, label }))} value={tab} onChange={setTab} />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <api.ui.Tabs tabs={TABS.map(({ id, label }) => ({ value: id, label }))} value={tab} onChange={setTab} />
+        <span title={dot.tooltip} onClick={dot.onClick} style={{ cursor: dot.onClick ? "pointer" : "default" }}>
+          <api.ui.StatusDot color={dot.color} />
+        </span>
+      </div>
       <div style={{ flex: 1, minHeight: 0, marginTop: 12, display: "flex" }}>
-        {tab === "rules" && <AutoSaveEditor api={api} home={home} relPath="CLAUDE.md" language="markdown" />}
+        {tab === "rules" && (
+          <AutoSaveEditor api={api} home={home} relPath={paths.claudeMdPath} language="markdown" onStatusChange={setDot} />
+        )}
         {tab === "settings" && (
-          <AutoSaveEditor api={api} home={home} relPath="settings.json" language="json" validate={jsonValidate} />
+          <AutoSaveEditor
+            api={api}
+            home={home}
+            relPath={paths.settingsJsonPath}
+            language="json"
+            validate={jsonValidate}
+            onStatusChange={setDot}
+          />
         )}
         {tab === "output-styles" && (
-          <FileListEditor api={api} home={home} title="Output Styles" dirRelPath="output-styles" kind="file" />
+          <FileListEditor
+            api={api}
+            home={home}
+            title="Output Styles"
+            dirRelPath={paths.outputStylesDir}
+            kind="file"
+            onStatusChange={setDot}
+          />
         )}
-        {tab === "agents" && <FileListEditor api={api} home={home} title="Agents" dirRelPath="agents" kind="file" />}
-        {tab === "commands" && <FileListEditor api={api} home={home} title="Commands" dirRelPath="commands" kind="file" />}
-        {tab === "skills" && <FileListEditor api={api} home={home} title="Skills" dirRelPath="skills" kind="skill" />}
+        {tab === "agents" && (
+          <FileListEditor api={api} home={home} title="Agents" dirRelPath={paths.agentsDir} kind="file" onStatusChange={setDot} />
+        )}
+        {tab === "commands" && (
+          <FileListEditor
+            api={api}
+            home={home}
+            title="Commands"
+            dirRelPath={paths.commandsDir}
+            kind="file"
+            onStatusChange={setDot}
+          />
+        )}
+        {tab === "skills" && (
+          <FileListEditor api={api} home={home} title="Skills" dirRelPath={paths.skillsDir} kind="skill" onStatusChange={setDot} />
+        )}
       </div>
     </div>
   );

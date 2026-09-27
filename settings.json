@@ -1,4 +1,10 @@
 {
   "category": "Utilities",
-  "version": "0.1.0"
+  "version": "0.1.0",
+  "claudeMdPath": "CLAUDE.md",
+  "settingsJsonPath": "settings.json",
+  "outputStylesDir": "output-styles",
+  "agentsDir": "agents",
+  "skillsDir": "skills",
+  "commandsDir": "commands"
 }

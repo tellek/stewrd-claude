@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import type { PluginApi } from "stewrd-plugin-api";
 import type { ClaudeHome } from "../lib/claudeHome";
+import type { SaveStatusDot } from "../lib/useSaveStatusDot";
 import { AutoSaveEditor } from "./AutoSaveEditor";
+import { scrollbarStyle } from "./scrollbarStyle";
 
 const NAME_RE = /^[\w.-]+$/;
 
@@ -25,12 +27,14 @@ export function FileListEditor({
   title,
   dirRelPath,
   kind,
+  onStatusChange,
 }: {
   api: PluginApi;
   home: ClaudeHome;
   title: string;
   dirRelPath: string;
   kind: "file" | "skill";
+  onStatusChange?: (dot: SaveStatusDot) => void;
 }) {
   const [entries, setEntries] = useState<string[]>([]);
   const [listLoaded, setListLoaded] = useState(false);
@@ -55,12 +59,12 @@ export function FileListEditor({
   }, [refresh]);
 
   if (selected) {
-    const relPath = kind === "skill" ? `skills/${selected}/SKILL.md` : `${dirRelPath}/${selected}`;
+    const relPath = kind === "skill" ? `${dirRelPath}/${selected}/SKILL.md` : `${dirRelPath}/${selected}`;
     return (
       <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
         <api.ui.Link label="← Back" onClick={() => setSelected(null)} />
         <div style={{ flex: 1, minHeight: 0, marginTop: 8 }}>
-          <AutoSaveEditor api={api} home={home} relPath={relPath} language="markdown" />
+          <AutoSaveEditor api={api} home={home} relPath={relPath} language="markdown" onStatusChange={onStatusChange} />
         </div>
       </div>
     );
@@ -77,7 +81,7 @@ export function FileListEditor({
     setCreateError(undefined);
 
     if (kind === "skill") {
-      home.createSkill(trimmed, statusTemplate(trimmed)).then((result) => {
+      home.createSkill(dirRelPath, trimmed, statusTemplate(trimmed)).then((result) => {
         setCreating(false);
         if (result.status === "ok") {
           setNewName("");
@@ -108,7 +112,7 @@ export function FileListEditor({
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "auto" }}>
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "auto", ...scrollbarStyle(api.theme.palette) }}>
       <h3 style={{ color: api.theme.palette.text }}>{title}</h3>
       {!listLoaded && <api.ui.Skeleton height={100} width="100%" />}
       {listLoaded &&

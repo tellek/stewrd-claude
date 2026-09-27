@@ -11,6 +11,15 @@ sidebar sub-item and a top tab in the plugin pane.
   files in that folder, plus "Create New".
 - **Skills** — same rollout, but each entry is a `skills/<name>/SKILL.md`
   folder.
+- **Status dot** — top-right of the tab row: idle by default, in-progress
+  while saving, green on success (reverting to idle 5s later or on window
+  focus, whichever comes first), red with a tooltip on save errors or an
+  on-disk conflict (click it to reload).
+
+Every path this plugin edits under `~/.claude` (`CLAUDE.md`, `settings.json`,
+`output-styles`, `agents`, `skills`, `commands`) is overridable in this
+plugin's own `settings.json` — see `lib/pluginPaths.ts`. Defaults are all
+relative to `~/.claude`, so they work unmodified on any machine.
 
 ## How it edits `~/.claude`
 

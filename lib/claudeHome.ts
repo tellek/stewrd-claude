@@ -25,7 +25,7 @@ export interface ClaudeHome {
   writeFile(relPath: string, text: string, opts: { crlf: boolean; bom: boolean }): Promise<WriteResult>;
   listDir(relDir: string, kind: "file" | "dir"): Promise<string[]>;
   createFile(relPath: string, text: string): Promise<WriteResult>;
-  createSkill(name: string, skillMdText: string): Promise<WriteResult>;
+  createSkill(dirRelPath: string, name: string, skillMdText: string): Promise<WriteResult>;
 }
 
 const ABSENT = "__ABSENT__";
@@ -191,7 +191,11 @@ try {
   if (-not (Test-Path -LiteralPath $dir)) {
     Write-Output (@{ entries = @() } | ConvertTo-Json -Compress)
   } else {
-    $names = @(Get-ChildItem -LiteralPath $dir -Name ${flag})
+    # Cast to [string[]]: Get-ChildItem -Name returns PSObject-wrapped
+    # strings carrying extra ETS members (PSPath, PSChildName, ...) that
+    # ConvertTo-Json serializes as full objects instead of plain strings
+    # unless stripped by this cast.
+    [string[]]$names = @(Get-ChildItem -LiteralPath $dir -Name ${flag})
     Write-Output (@{ entries = @($names) } | ConvertTo-Json -Compress)
   }
 } catch {
@@ -233,11 +237,11 @@ try {
     }
   }
 
-  async function createSkill(name: string, skillMdText: string): Promise<WriteResult> {
+  async function createSkill(dirRelPath: string, name: string, skillMdText: string): Promise<WriteResult> {
     const script = `
 $ErrorActionPreference = 'Stop'
 $dir = Join-Path $env:USERPROFILE ".claude"
-$dir = Join-Path $dir "skills"
+$dir = Join-Path $dir $env:SKILLS_DIR
 $dir = Join-Path $dir $env:NAME
 try {
   New-Item -ItemType Directory -Path $dir -ErrorAction Stop | Out-Null
@@ -249,11 +253,11 @@ try {
     Write-Output (@{ status = "error"; message = $_.Exception.Message } | ConvertTo-Json -Compress)
   }
 }`;
-    const result = await execPS(script, { NAME: name });
+    const result = await execPS(script, { NAME: name, SKILLS_DIR: dirRelPath });
     if (result.code !== 0) return { status: "error", message: result.stderr || "Create Failed" };
     const parsed = parseLastJsonLine<{ status: WriteStatus; message?: string }>(result.stdout);
     if (parsed.status !== "ok") return parsed;
-    return createFile(`skills/${name}/SKILL.md`, skillMdText);
+    return createFile(`${dirRelPath}/${name}/SKILL.md`, skillMdText);
   }
 
   return { readFile, writeFile, listDir, createFile, createSkill };
