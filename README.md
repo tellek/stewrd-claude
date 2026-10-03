@@ -9,7 +9,9 @@ a top tab in the plugin pane. By default it edits the global
   every tab to `<project>\.claude` (Rules is `<project>\CLAUDE.md`). Each
   targeted project, plus Global, becomes a sidebar sub-item; "Remove Project"
   drops it, and Global's sub-item disappears when no projects remain. The
-  sidebar icon shows the worst save status across all scopes.
+  sidebar icon shows the worst save status across all scopes (see "Sidebar
+  Icon Color Rules" in `CLAUDE.md`: success lasts 3s of focused time, and
+  disk conflicts show as warnings).
 - **Rules / Settings** — full-height auto-saving editors.
   Settings refuses to save invalid JSON.
 - **Output Styles / Agents / Skills / Commands** — a "Load" button next to
