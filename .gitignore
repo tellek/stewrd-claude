@@ -3,3 +3,4 @@ dist/
 data/
 storage.json
 .serena/
+*.zip
