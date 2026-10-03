@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { PluginApi, PluginContext, StatusColor } from "stewrd-plugin-api";
 import { createClaudeHome, type ClaudeHome } from "./lib/claudeHome";
 import { DEFAULT_PLUGIN_PATHS, loadPluginPaths, type PluginPaths } from "./lib/pluginPaths";
-import { IDLE_DOT, type SaveStatusDot } from "./lib/useSaveStatusDot";
+import { IDLE_AFTER_SUCCESS_MS, IDLE_DOT, type SaveStatusDot } from "./lib/useSaveStatusDot";
 import { AutoSaveEditor } from "./components/AutoSaveEditor";
 import { FileListEditor } from "./components/FileListEditor";
 import { scrollbarStyle } from "./components/scrollbarStyle";
@@ -121,11 +121,43 @@ function publishSidebarItems() {
   ctx.api.statusIcon.set(worstColor(Object.values(tabColors)));
 }
 
+// Sidebar success dots revert to idle IDLE_AFTER_SUCCESS_MS after success, but
+// only while the window has focus and this plugin's pane is mounted; leaving
+// either pauses the countdown and returning restarts it.
+const successTimers = new Map<string, ReturnType<typeof setTimeout>>();
+let paneMounted = false;
+
+function armSuccessTimers() {
+  if (!paneMounted || !document.hasFocus()) return;
+  for (const key of Object.keys(tabColors)) {
+    if (tabColors[key] !== "success" || successTimers.has(key)) continue;
+    successTimers.set(
+      key,
+      setTimeout(() => {
+        successTimers.delete(key);
+        if (tabColors[key] !== "success") return;
+        tabColors[key] = "idle";
+        publishSidebarItems();
+      }, IDLE_AFTER_SUCCESS_MS),
+    );
+  }
+}
+
+function pauseSuccessTimers() {
+  successTimers.forEach(clearTimeout);
+  successTimers.clear();
+}
+
 function setTabColor(scopeId: string, tab: TabId, color: StatusColor) {
   const key = `${scopeId}:${tab}`;
-  if ((tabColors[key] ?? "idle") === color) return;
+  const current = tabColors[key] ?? "idle";
+  // Only the countdown above (or a newer non-idle status) clears success, so an
+  // editor unmounting on a plugin switch can't cut the 3s short.
+  if (color === "idle" && current === "success") return;
+  if (current === color) return;
   tabColors[key] = color;
   publishSidebarItems();
+  if (color === "success") armSuccessTimers();
 }
 
 async function persistProjects(projects: string[]) {
@@ -208,6 +240,19 @@ export function Component({ api }: { api: PluginApi }) {
   useEffect(() => {
     setLoadDrawerOpen(false);
   }, [tab, scopeId]);
+
+  useEffect(() => {
+    paneMounted = true;
+    armSuccessTimers();
+    window.addEventListener("focus", armSuccessTimers);
+    window.addEventListener("blur", pauseSuccessTimers);
+    return () => {
+      paneMounted = false;
+      pauseSuccessTimers();
+      window.removeEventListener("focus", armSuccessTimers);
+      window.removeEventListener("blur", pauseSuccessTimers);
+    };
+  }, []);
 
   useEffect(() => {
     if (!targetOpen) return;

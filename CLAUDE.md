@@ -4,6 +4,17 @@
 - **NEVER** specify a color manually, instead **ALWAYS** select a variable from the color palette to identify a color so that it is controllable by theme changes
 - All titles and button text should be Title case. IE: "Create New Palette", NOT "Create new palette"
 
+## Sidebar Icon Color Rules
+- Each plugin shows a dot (or dots) reflecting what it is doing, colored from the palette status colors:
+    - Idle: `status.idle`
+    - Working (saving, processing, etc.): `status.in-progress`
+    - Completed an action (saved, processed, etc.): `status.success` for 3 seconds, counted only while the app window and this plugin have focus. If the user is in another app or another plugin, stay `status.success` until they return, then revert to idle 3 seconds later
+    - Non-breaking issue, or something that needs the user to act: `status.warning`
+    - Breaking error: `status.error`
+- The plugin's sidebar icon (`api.statusIcon`) follows the dots; with several dots use the priority `error > warning > in-progress > success > idle`
+- When the result is idle the sidebar icon uses the default color, not `status.idle`
+- Implementation: `lib/useSaveStatusDot.ts` (in-pane dot, `IDLE_AFTER_SUCCESS_MS`) and `index.tsx` (`setTabColor`, `worstColor`, success timers for the sidebar)
+
 ## General
 - When changes are completed in this project **ALWAYS** do the following:
     1. Always update README.md to reflect the change if the change is significant enough for this
