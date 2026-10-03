@@ -52,7 +52,11 @@ function parseLastJsonLine<T>(stdout: string): T {
   return JSON.parse(line) as T;
 }
 
-export function createClaudeHome(api: PluginApi): ClaudeHome {
+// Empty/unset BASE means the global ~/.claude; project scopes pass an absolute
+// <project>/.claude path via the BASE env var.
+const BASE_EXPR = `$(if ($env:BASE) { $env:BASE } else { Join-Path $env:USERPROFILE ".claude" })`;
+
+export function createClaudeHome(api: PluginApi, base = ""): ClaudeHome {
   const queues = new Map<string, Promise<void>>();
   const mtimes = new Map<string, string | null>(); // null = known-absent
   let rootPathPromise: Promise<string> | null = null;
@@ -80,7 +84,7 @@ export function createClaudeHome(api: PluginApi): ClaudeHome {
 
   async function execPS(script: string, env: Record<string, string>) {
     return api.shell.exec("powershell", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], {
-      env,
+      env: { ...env, BASE: base },
     });
   }
 
@@ -102,7 +106,7 @@ export function createClaudeHome(api: PluginApi): ClaudeHome {
       const script = `
 $ErrorActionPreference = 'Stop'
 try {
-  $dst = Join-Path $env:USERPROFILE ".claude"
+  $dst = ${BASE_EXPR}
   $dst = Join-Path $dst $env:RELPATH
   if (-not (Test-Path -LiteralPath $dst)) {
     Write-Output (@{ exists = $false } | ConvertTo-Json -Compress)
@@ -143,7 +147,7 @@ try {
         const script = `
 $ErrorActionPreference = 'Stop'
 try {
-  $dst = Join-Path $env:USERPROFILE ".claude"
+  $dst = ${BASE_EXPR}
   $dst = Join-Path $dst $env:RELPATH
   $parent = Split-Path $dst -Parent
   if ($env:EXPECTED -eq '${ABSENT}') {
@@ -188,7 +192,7 @@ try {
     const script = `
 $ErrorActionPreference = 'Stop'
 try {
-  $dir = Join-Path $env:USERPROFILE ".claude"
+  $dir = ${BASE_EXPR}
   $dir = Join-Path $dir $env:RELPATH
   if (-not (Test-Path -LiteralPath $dir)) {
     Write-Output (@{ entries = @() } | ConvertTo-Json -Compress)
@@ -214,7 +218,7 @@ try {
     try {
       const script = `
 $ErrorActionPreference = 'Stop'
-$dst = Join-Path $env:USERPROFILE ".claude"
+$dst = ${BASE_EXPR}
 $dst = Join-Path $dst $env:RELPATH
 try {
   $parent = Split-Path $dst -Parent
@@ -242,7 +246,7 @@ try {
   async function createSkill(dirRelPath: string, name: string, skillMdText: string): Promise<WriteResult> {
     const script = `
 $ErrorActionPreference = 'Stop'
-$dir = Join-Path $env:USERPROFILE ".claude"
+$dir = ${BASE_EXPR}
 $dir = Join-Path $dir $env:SKILLS_DIR
 $dir = Join-Path $dir $env:NAME
 try {
@@ -267,7 +271,7 @@ try {
       const recurse = kind === "dir" ? " -Recurse" : "";
       const script = `
 $ErrorActionPreference = 'Stop'
-$dst = Join-Path $env:USERPROFILE ".claude"
+$dst = ${BASE_EXPR}
 $dst = Join-Path $dst $env:RELPATH
 try {
   if (Test-Path -LiteralPath $dst) { Remove-Item -LiteralPath $dst -Force${recurse} }
@@ -294,7 +298,7 @@ try {
       const caseOnly = fromRelPath.toLowerCase() === toRelPath.toLowerCase() && fromRelPath !== toRelPath;
       const script = `
 $ErrorActionPreference = 'Stop'
-$root = Join-Path $env:USERPROFILE ".claude"
+$root = ${BASE_EXPR}
 $src = Join-Path $root $env:FROM
 $dst = Join-Path $root $env:TO
 try {

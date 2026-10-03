@@ -7,12 +7,14 @@ import { IDLE_DOT, type SaveStatusDot } from "./lib/useSaveStatusDot";
 import { AutoSaveEditor } from "./components/AutoSaveEditor";
 import { FileListEditor } from "./components/FileListEditor";
 import { scrollbarStyle } from "./components/scrollbarStyle";
+import { GLOBAL_SCOPE_ID, resolveScope, scopeLabel } from "./lib/scope";
+import { directoryExists, discoverProjects } from "./lib/projects";
 
 type TabId = "rules" | "settings" | "output-styles" | "agents" | "skills" | "commands";
 
 const TABS: { id: TabId; label: string }[] = [
-  { id: "rules", label: "Global Rules" },
-  { id: "settings", label: "Global Settings" },
+  { id: "rules", label: "Rules" },
+  { id: "settings", label: "Settings" },
   { id: "output-styles", label: "Output Styles" },
   { id: "agents", label: "Agents" },
   { id: "skills", label: "Skills" },
@@ -57,41 +59,109 @@ function createTabStore(initial: TabId) {
 
 const tabStore = createTabStore("rules");
 
+/** Selected scope (Global or a targeted project path) plus the targeted
+ * project list. Module-level for the same reason as tabStore. The snapshot is
+ * replaced (never mutated) so useSyncExternalStore sees changes. */
+interface ScopeState {
+  selected: string;
+  projects: string[];
+}
+let scopeState: ScopeState = { selected: GLOBAL_SCOPE_ID, projects: [] };
+const scopeListeners = new Set<() => void>();
+const scopeStore = {
+  get: () => scopeState,
+  set(next: ScopeState) {
+    scopeState = next;
+    scopeListeners.forEach((fn) => fn());
+  },
+  subscribe(fn: () => void) {
+    scopeListeners.add(fn);
+    return () => scopeListeners.delete(fn);
+  },
+};
+
+const PROJECTS_KEY = "targetedProjects";
+
 /** Module-level for the same reason as tabStore: the sidebar sub-items (and
  * their per-tab save-status dot colors) outlive any one mounted Component,
  * and ctx is only handed to activate(). */
 let activeCtx: PluginContext | null = null;
-const tabColors: Partial<Record<TabId, StatusColor>> = {};
+const tabColors: Record<string, StatusColor> = {}; // keyed `${scope}:${tab}`
+
+const SEVERITY: StatusColor[] = ["idle", "success", "in-progress", "warning", "error"];
+
+function worstColor(colors: StatusColor[]): StatusColor {
+  return colors.reduce<StatusColor>((w, c) => (SEVERITY.indexOf(c) > SEVERITY.indexOf(w) ? c : w), "idle");
+}
+
+function scopeColor(scopeId: string): StatusColor {
+  return worstColor(TABS.map((t) => tabColors[`${scopeId}:${t.id}`] ?? "idle"));
+}
+
+function selectScope(scopeId: string) {
+  const ctx = activeCtx;
+  scopeStore.set({ ...scopeState, selected: scopeId });
+  if (ctx && !ctx.signal.aborted) ctx.api.sidebar.setSelected(scopeId);
+}
 
 function publishSidebarItems() {
   const ctx = activeCtx;
   if (!ctx || ctx.signal.aborted) return;
+  const { projects } = scopeState;
+  // Global is only a sub-item while at least one project is targeted.
+  const ids = projects.length === 0 ? [] : [GLOBAL_SCOPE_ID, ...projects];
   ctx.api.sidebar.setItems(
-    TABS.map((t) => ({
-      id: t.id,
-      label: t.label,
-      color: tabColors[t.id] ?? "idle",
-      onClick: () => {
-        if (ctx.signal.aborted) return;
-        tabStore.set(t.id);
-        ctx.api.sidebar.setSelected(t.id);
-      },
+    ids.map((id) => ({
+      id,
+      label: scopeLabel(id),
+      color: scopeColor(id),
+      onClick: () => selectScope(id),
     })),
   );
+  ctx.api.statusIcon.set(worstColor(Object.values(tabColors)));
 }
 
-function setTabColor(tab: TabId, color: StatusColor) {
-  if (tabColors[tab] === color) return;
-  tabColors[tab] = color;
+function setTabColor(scopeId: string, tab: TabId, color: StatusColor) {
+  const key = `${scopeId}:${tab}`;
+  if ((tabColors[key] ?? "idle") === color) return;
+  tabColors[key] = color;
   publishSidebarItems();
 }
 
-export function activate(ctx: PluginContext) {
+async function persistProjects(projects: string[]) {
+  const ctx = activeCtx;
+  if (ctx && !ctx.signal.aborted) await ctx.api.storage.set(PROJECTS_KEY, projects);
+}
+
+async function addProject(path: string) {
+  const project = path.trim().replace(/[\\/]+$/, "");
+  if (!project) return;
+  const projects = scopeState.projects.includes(project) ? scopeState.projects : [...scopeState.projects, project];
+  scopeStore.set({ selected: project, projects });
+  publishSidebarItems();
+  selectScope(project);
+  await persistProjects(projects);
+}
+
+async function removeProject(project: string) {
+  const projects = scopeState.projects.filter((p) => p !== project);
+  for (const key of Object.keys(tabColors)) if (key.startsWith(`${project}:`)) delete tabColors[key];
+  const selected = scopeState.selected === project ? GLOBAL_SCOPE_ID : scopeState.selected;
+  scopeStore.set({ selected, projects });
+  publishSidebarItems();
+  selectScope(selected);
+  await persistProjects(projects);
+}
+
+export async function activate(ctx: PluginContext) {
   if (ctx.signal.aborted) return;
   activeCtx = ctx;
   ctx.api.statusIcon.set("idle");
+  const stored = (await ctx.api.storage.get<string[]>(PROJECTS_KEY)) ?? [];
+  if (ctx.signal.aborted) return;
+  scopeStore.set({ selected: stored.includes(scopeState.selected) ? scopeState.selected : GLOBAL_SCOPE_ID, projects: stored });
   publishSidebarItems();
-  ctx.api.sidebar.setSelected(tabStore.get());
+  ctx.api.sidebar.setSelected(scopeState.selected);
 }
 
 export function deactivate() {}
@@ -107,13 +177,21 @@ function jsonValidate(text: string): string | null {
 
 export function Component({ api }: { api: PluginApi }) {
   const tab = useSyncExternalStore(tabStore.subscribe, tabStore.get);
-  const home: ClaudeHome = useMemo(() => createClaudeHome(api), [api]);
+  const { selected: scopeId, projects } = useSyncExternalStore(scopeStore.subscribe, scopeStore.get);
+  const scope = useMemo(() => resolveScope(scopeId), [scopeId]);
+  // One immutable home per scope keeps its mtime cache and unmount flush tied
+  // to the right folder.
+  const home: ClaudeHome = useMemo(() => createClaudeHome(api, scope.base), [api, scope.base]);
   const [paths, setPaths] = useState<PluginPaths>(DEFAULT_PLUGIN_PATHS);
+  const [targetOpen, setTargetOpen] = useState(false);
+  const [candidates, setCandidates] = useState<string[]>([]);
+  const [manualPath, setManualPath] = useState("");
+  const [targetError, setTargetError] = useState<string | null>(null);
   // Each dot is tagged with the tab whose editor reported it, so the outgoing
   // editor's unmount-time IDLE report (or a stale dot from the previous tab)
   // is never attributed to the newly active tab.
-  const [reported, setReported] = useState<{ tab: TabId; dot: SaveStatusDot }>({ tab, dot: IDLE_DOT });
-  const dot = reported.tab === tab ? reported.dot : IDLE_DOT;
+  const [reported, setReported] = useState<{ scopeId: string; tab: TabId; dot: SaveStatusDot }>({ scopeId, tab, dot: IDLE_DOT });
+  const dot = reported.scopeId === scopeId && reported.tab === tab ? reported.dot : IDLE_DOT;
   // Mirrors to the sidebar immediately, not through a useEffect over this
   // batched state - React batches an outgoing tab's unmount cleanup together
   // with an incoming tab's mount effect in the same commit, so an effect
@@ -122,14 +200,37 @@ export function Component({ api }: { api: PluginApi }) {
   // green). setTabColor works off the module-level activeCtx, so it's safe
   // to call here even while the calling component is mid-unmount.
   const setDot = (d: SaveStatusDot) => {
-    setReported({ tab, dot: d });
-    setTabColor(tab, d.color);
+    setReported({ scopeId, tab, dot: d });
+    setTabColor(scopeId, tab, d.color);
   };
   const [loadDrawerOpen, setLoadDrawerOpen] = useState(false);
 
   useEffect(() => {
     setLoadDrawerOpen(false);
-  }, [tab]);
+  }, [tab, scopeId]);
+
+  useEffect(() => {
+    if (!targetOpen) return;
+    let cancelled = false;
+    discoverProjects(api).then((found) => {
+      if (!cancelled) setCandidates(found);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, targetOpen]);
+
+  const targetProject = async (path: string) => {
+    if (!path.trim()) return;
+    if (!(await directoryExists(api, path.trim()))) {
+      setTargetError("Folder Not Found");
+      return;
+    }
+    setTargetError(null);
+    setManualPath("");
+    setTargetOpen(false);
+    await addProject(path);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -143,11 +244,34 @@ export function Component({ api }: { api: PluginApi }) {
 
   const setTab = (next: string) => {
     tabStore.set(next as TabId);
-    api.sidebar.setSelected(next);
   };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <span style={{ flex: 1, minWidth: 0, color: api.theme.palette.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {scopeId === GLOBAL_SCOPE_ID ? "Global" : scopeId}
+        </span>
+        {scopeId !== GLOBAL_SCOPE_ID && <api.ui.TextButton label="Remove Project" onClick={() => removeProject(scopeId)} />}
+        <api.ui.TextButton label="Target Project" onClick={() => setTargetOpen((o) => !o)} />
+      </div>
+      {targetOpen && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+          <api.ui.Dropdown
+            options={candidates.filter((c) => !projects.includes(c)).map((c) => ({ label: c, value: c }))}
+            value=""
+            placeholder="Recent Projects"
+            onChange={targetProject}
+          />
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <api.ui.TextBox value={manualPath} onChange={setManualPath} placeholder="Or Enter A Project Folder Path" rows={1} />
+            </div>
+            <api.ui.TextButton label="Add" variant="primary" onClick={() => targetProject(manualPath)} />
+          </div>
+          {targetError && <span style={{ color: api.theme.palette.status.error }}>{targetError}</span>}
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         {/* api.ui.Tabs is a plain non-wrapping flex row; without minWidth:0 its
             min-content width (all tab buttons) would force this row, and the
@@ -176,12 +300,13 @@ export function Component({ api }: { api: PluginApi }) {
           </div>
         )}
       </div>
-      <div style={{ flex: 1, minHeight: 0, minWidth: 0, marginTop: 12, display: "flex" }}>
+      <div key={scopeId} style={{ flex: 1, minHeight: 0, minWidth: 0, marginTop: 12, display: "flex" }}>
         {tab === "rules" && (
           <AutoSaveEditor
             api={api}
             home={home}
-            relPath={paths.claudeMdPath}
+            relPath={scope.rulesRelPath ?? paths.claudeMdPath}
+            storageScope={scope.storageScope}
             language="markdown"
             debounceMs={paths.saveDelayMs}
             onStatusChange={setDot}
@@ -192,6 +317,7 @@ export function Component({ api }: { api: PluginApi }) {
             api={api}
             home={home}
             relPath={paths.settingsJsonPath}
+            storageScope={scope.storageScope}
             language="json"
             debounceMs={paths.saveDelayMs}
             validate={jsonValidate}
@@ -206,6 +332,7 @@ export function Component({ api }: { api: PluginApi }) {
             itemLabel={ITEM_LABELS["output-styles"]!}
             dirRelPath={paths.outputStylesDir}
             disabledDirRelPath={`${paths.outputStylesDir}-disabled`}
+            storageScope={scope.storageScope}
             kind="file"
             drawerOpen={loadDrawerOpen}
             onDrawerOpenChange={setLoadDrawerOpen}
@@ -221,6 +348,7 @@ export function Component({ api }: { api: PluginApi }) {
             itemLabel={ITEM_LABELS.agents!}
             dirRelPath={paths.agentsDir}
             disabledDirRelPath={`${paths.agentsDir}-disabled`}
+            storageScope={scope.storageScope}
             kind="file"
             drawerOpen={loadDrawerOpen}
             onDrawerOpenChange={setLoadDrawerOpen}
@@ -236,6 +364,7 @@ export function Component({ api }: { api: PluginApi }) {
             itemLabel={ITEM_LABELS.commands!}
             dirRelPath={paths.commandsDir}
             disabledDirRelPath={`${paths.commandsDir}-disabled`}
+            storageScope={scope.storageScope}
             kind="file"
             drawerOpen={loadDrawerOpen}
             onDrawerOpenChange={setLoadDrawerOpen}
@@ -251,6 +380,7 @@ export function Component({ api }: { api: PluginApi }) {
             itemLabel={ITEM_LABELS.skills!}
             dirRelPath={paths.skillsDir}
             disabledDirRelPath={`${paths.skillsDir}-disabled`}
+            storageScope={scope.storageScope}
             kind="skill"
             drawerOpen={loadDrawerOpen}
             onDrawerOpenChange={setLoadDrawerOpen}

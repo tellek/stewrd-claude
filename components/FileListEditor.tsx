@@ -55,6 +55,7 @@ export function FileListEditor({
   itemLabel,
   dirRelPath,
   disabledDirRelPath,
+  storageScope = "",
   kind,
   drawerOpen,
   onDrawerOpenChange,
@@ -67,6 +68,7 @@ export function FileListEditor({
   itemLabel: string;
   dirRelPath: string;
   disabledDirRelPath: string;
+  storageScope?: string;
   kind: "file" | "skill";
   drawerOpen: boolean;
   onDrawerOpenChange: (open: boolean) => void;
@@ -79,7 +81,7 @@ export function FileListEditor({
   const [selectedDirty, setSelectedDirty] = useState(false);
   const [pendingOp, setPendingOp] = useState<Set<string>>(new Set());
   const restoredRef = useRef(false);
-  const storageKey = `lastSelected:${dirRelPath}`;
+  const storageKey = `${storageScope}lastSelected:${dirRelPath}`;
 
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
@@ -293,6 +295,7 @@ export function FileListEditor({
           api={api}
           home={home}
           relPath={relPathOf(selected)}
+          storageScope={storageScope}
           language="markdown"
           debounceMs={debounceMs}
           onStatusChange={onStatusChange}

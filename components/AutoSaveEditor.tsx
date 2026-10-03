@@ -8,6 +8,7 @@ export function AutoSaveEditor({
   api,
   home,
   relPath,
+  storageScope = "",
   language,
   debounceMs,
   validate,
@@ -17,6 +18,8 @@ export function AutoSaveEditor({
   api: PluginApi;
   home: ClaudeHome;
   relPath: string;
+  /** Prefix for api.storage keys; empty for Global so pre-existing keys keep working. */
+  storageScope?: string;
   language: "json" | "markdown";
   debounceMs: number;
   validate?: (text: string) => string | null;
@@ -30,7 +33,7 @@ export function AutoSaveEditor({
   // Waits for its own storage round-trip (viewportLoaded) alongside the
   // text load (loaded) before ever mounting CodeTextArea, since it only
   // applies initialSelection/initialScrollTop once, at construction.
-  const viewportKey = `viewport:${relPath}`;
+  const viewportKey = `${storageScope}viewport:${relPath}`;
   const [viewport, setViewport] = useState<{ selection: { anchor: number; head: number }; scrollTop: number } | null>(null);
   const [viewportLoaded, setViewportLoaded] = useState(false);
 

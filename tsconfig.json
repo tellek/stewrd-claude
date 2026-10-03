@@ -13,5 +13,5 @@
     "types": ["react"]
   },
   "include": ["**/*.ts", "**/*.tsx", ".stewrd/plugin-api.d.ts", ".stewrd/assets.d.ts"],
-  "exclude": ["**/dist/**", "**/node_modules/**"]
+  "exclude": ["tests/**", "**/dist/**", "**/node_modules/**"]
 }

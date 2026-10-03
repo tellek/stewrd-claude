@@ -1,11 +1,16 @@
-# Claude Control
+# Claude
 
-A Stewrd plugin for editing global Claude Code configuration under
-`%USERPROFILE%\.claude`: Global Rules (`CLAUDE.md`), Global Settings
-(`settings.json`), Output Styles, Agents, Skills, and Commands. Each is a
-sidebar sub-item and a top tab in the plugin pane.
+A Stewrd plugin for editing Claude Code configuration: Rules (`CLAUDE.md`),
+Settings (`settings.json`), Output Styles, Agents, Skills, and Commands, each
+a top tab in the plugin pane. By default it edits the global
+`%USERPROFILE%\.claude`.
 
-- **Global Rules / Global Settings** — full-height auto-saving editors.
+- **Target Project** — pick a recent project or enter a folder path to scope
+  every tab to `<project>\.claude` (Rules is `<project>\CLAUDE.md`). Each
+  targeted project, plus Global, becomes a sidebar sub-item; "Remove Project"
+  drops it, and Global's sub-item disappears when no projects remain. The
+  sidebar icon shows the worst save status across all scopes.
+- **Rules / Settings** — full-height auto-saving editors.
   Settings refuses to save invalid JSON.
 - **Output Styles / Agents / Skills / Commands** — a "Load" button next to
   the status dot opens a right-side drawer listing every entry (flat `*.md`

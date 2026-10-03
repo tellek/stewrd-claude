@@ -1,6 +1,6 @@
 {
   "id": "claude-control",
-  "name": "Claude Control",
+  "name": "Claude",
   "icon": "default",
   "entry": "dist/index.js",
   "description": "Edit global Claude Code configuration: rules, settings, output styles, agents, skills, and commands.",
